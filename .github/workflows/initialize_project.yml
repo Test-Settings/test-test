@@ -1,0 +1,94 @@
+name: Initialize the new project
+
+on:
+    workflow_call:
+        secrets:
+            token:
+                required: false
+
+jobs:
+    GitHub_Repository_Setup:
+        runs-on: ubuntu-latest
+        steps:
+
+            - name: Generate token
+              id: generate_token
+              uses: tibdex/github-app-token@v1
+              with:
+                app_id: ${{ secrets.APP_ID }}
+                private_key: ${{ secrets.PRIVATE_KEY }}
+
+            - name: Lowercase the name of the repository
+              id: LowercaseRepositoryName
+              uses: ASzc/change-string-case-action@v5
+              with:
+                  string: ${{ github.event.repository.name }}
+
+            - name: Set repository permissions and remove user who triggered the workflow from the list of repository collaborators
+              uses: actions/github-script@v6
+              with:
+                  github-token: ${{ steps.generate_token.outputs.token }}
+                  script: |
+                      await github.request('PUT /orgs/{org}/teams/{team_slug}/repos/{owner}/{repo}', {
+                        org: 'Test-Settings',
+                        team_slug: 'motioncode_developer',
+                        owner: 'Test-Settings',
+                        repo: '${{ steps.LowercaseRepositoryName.outputs.lowercase }}',
+                        permission: 'maintain'
+                      });
+                      await github.request('PUT /orgs/{org}/teams/{team_slug}/repos/{owner}/{repo}', {
+                        org: 'Test-Settings',
+                        team_slug: 'motioncode_admin',
+                        owner: 'Test-Settings',
+                        repo: '${{ steps.LowercaseRepositoryName.outputs.lowercase }}',
+                        permission: 'admin'
+                      });
+                      await github.request('DELETE /repos/{owner}/{repo}/collaborators/{username}', {
+                        owner: 'Test-Settings',
+                        repo: '${{ steps.LowercaseRepositoryName.outputs.lowercase }}',
+                        username: "${{ github.actor }}"
+                      });
+
+            - name: Checkout repository
+              uses: actions/checkout@v3
+
+            - name: Create and checkout main branch
+              run: git checkout -b main
+
+            - name: Push main branch
+              run: git push origin main
+
+            - name: Set branch protection rules for the release branch
+              uses: actions/github-script@v6
+              with:
+                  github-token: ${{ steps.generate_token.outputs.token }}
+                  script: |
+                      await github.rest.repos.updateBranchProtection({
+                         owner: 'Test-Settings',
+                         repo: '${{ steps.LowercaseRepositoryName.outputs.lowercase }}',
+                         branch: 'release',
+                         required_status_checks: null,
+                         enforce_admins: null,
+                         required_pull_request_reviews: {
+                             dismiss_stale_reviews: false,
+                             require_code_owner_reviews: false,
+                             required_approving_review_count: 1
+                         },
+                         restrictions: null,
+                         required_conversation_resolution: true,
+                         allow_deletions: true,
+                         enforce_admins: true
+                       });
+
+            - name: Delete admin branch protection rule for the release branch
+              uses: actions/github-script@v6
+              with:
+                  github-token: ${{ steps.generate_token.outputs.token }}
+                  script: |
+                      await github.rest.repos.deleteAdminBranchProtection({
+                         owner: 'Test-Settings',
+                         repo: '${{ steps.LowercaseRepositoryName.outputs.lowercase }}',
+                         branch: 'release'
+                       });
+
+

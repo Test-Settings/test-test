@@ -1,0 +1,19 @@
+name: Trigger the initialization of the new project
+
+on: 
+  push:
+    branches: 
+      - release 
+  
+jobs: 
+  Print_Workflow_Description: 
+    runs-on: ubuntu-latest  
+    steps: 
+    - name: Print workflow description
+      run: echo "New Repository is being initialized"
+  
+  Trigger_Project_Initialization: 
+    needs: [Print_Workflow_Description] 
+    if: "github.event.created"
+    uses: ./.github/workflows/initialize_project.yml
+    secrets: inherit
